@@ -11,6 +11,7 @@ def main()
   write_element_combination(wslist)
   write_ws_combination(wslist)
   write_nochain_ws_combination(wslist)
+  write_loop_chains(wslist)
 end
 
 def read_ws()
@@ -154,6 +155,21 @@ def make_no_wsc_word(ws1, ws2)
                  ws2.name, ws2.elems_s, selfchain2)
 end
 
+def write_loop_chains(wslist)
+  wslist.each {|ws|
+    if chain1 = ws.chain(ws) then
+      if chain2 = ws.chain_from(chain1.chain) then
+        if chain1.first.name == chain2.chain.name then
+          kanas = ["むげんれんけい"]
+          word = sprintf("【無限連携】%s(%s⇔%s)", ws.name,
+                         chain1.first.name, chain1.chain.name)
+          write_dic_entry(kanas, word)
+        end
+      end
+    end
+  }
+end
+
 class WeaponSkill
   def initialize(type, kanas, name, elems, kind, jobs)
     (@type, @kanas, @name, @elems, @kind, @jobs) =
@@ -237,6 +253,7 @@ class ChainElement
   def to_s() @name end
 
   def chain(elem)
+    return nil if @last
     return nil if not map = @@map[@name]
     return nil if not chain = map[elem.name]
     return ChainElement.new(chain[:element], chain[:last])
