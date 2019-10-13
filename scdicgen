@@ -214,16 +214,14 @@ end
 
 def write_loop_chains(fstream, wslist)
   wslist.each {|ws|
-    if chain1 = ws.chain(ws) then
-      if chain2 = ws.chain_from(chain1.chain) then
-        if chain1.first.name == chain2.chain.name then
-          kanas = ["むげんれんけい"]
-          word = sprintf("【無限連携】%s(%s⇔%s)", ws.name,
-                         chain1.first.name, chain1.chain.name)
-          write_dic_entry(fstream, kanas, word)
-        end
-      end
-    end
+    next if not chain1 = ws.chain(ws)
+    next if not chain2 = ws.chain_from(chain1.chain)
+    next if chain1.first.name != chain2.chain.name
+
+    kanas = ["むげんれんけい"]
+    word = sprintf("【無限連携】%s(%s⇔%s)", ws.name,
+                   chain1.first.name, chain1.chain.name)
+    write_dic_entry(fstream, kanas, word)
   }
 end
 
