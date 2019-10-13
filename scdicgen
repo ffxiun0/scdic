@@ -10,6 +10,7 @@ def main()
   write_ws_list(wslist)
   write_element_combination(wslist)
   write_ws_combination(wslist)
+  write_nochain_ws_combination(wslist)
 end
 
 def read_ws()
@@ -32,14 +33,12 @@ def write_ws_list(wslist)
   wslist.each {|ws|
     kanas = [ws.type_kana] + ws.kanas
 
-    elems = ws.elems.empty? ? "なし" : ws.elems.join("/")
-
     dlist = [ws.type]
     dlist << ws.kind if not ws.kind.empty?
-    dlist << ws.jobs.join("") if not ws.jobs.empty?
+    dlist << ws.jobs_s if not ws.jobs_s.empty?
     desc = dlist.join("/")
 
-    word = sprintf("%s(%s)【%s】", ws.name, elems, desc)
+    word = sprintf("%s(%s)【%s】", ws.name, ws.elems_s, desc)
 
     write_dic_entry(kanas, word)
   }
@@ -115,6 +114,46 @@ def make_wsc_word(ws1, ws2, chain)
           chain.chain.name, chain.chain.last ? "<終>" : "")
 end
 
+def write_nochain_ws_combination(wslist)
+  wslist.each {|ws1|
+    wslist.each {|ws2|
+      if !ws1.chain(ws2) && !ws2.chain(ws1) then
+        kanas = make_no_wsc_kanas(ws1, ws2)
+        word = make_no_wsc_word(ws1, ws2)
+        write_dic_entry(kanas, word)
+      end
+    }
+  }
+end
+
+def make_no_wsc_kanas(ws1, ws2)
+  result = []
+
+  ws1.kanas.each {|ws1_kana|
+    ws2.kanas.each {|ws2_kana|
+      result << ws1_kana + "｜" + ws2_kana
+    }
+  }
+  ws1.kanas.each {|ws1_kana|
+      result << ws1_kana + "｜" + ws2.type_kana
+  }
+  ws2.kanas.each {|ws2_kana|
+      result << ws1.type_kana + "｜" + ws2_kana
+  }
+  result << ws1.type_kana + "｜" + ws2.type_kana
+
+  return result
+end
+
+def make_no_wsc_word(ws1, ws2)
+  selfchain1 = ws1.chain(ws1) ? "<自己連携有>" : ""
+  selfchain2 = ws2.chain(ws2) ? "<自己連携有>" : ""
+
+  return sprintf("【連携しない】%s(%s)%s｜%s(%s)%s",
+                 ws1.name, ws1.elems_s, selfchain1,
+                 ws2.name, ws2.elems_s, selfchain2)
+end
+
 class WeaponSkill
   def initialize(type, kanas, name, elems, kind, jobs)
     (@type, @kanas, @name, @elems, @kind, @jobs) =
@@ -141,8 +180,10 @@ class WeaponSkill
   def kanas() @kanas end
   def name() @name end
   def elems() @elems end
+  def elems_s() @elems.empty? ? "なし" : @elems.join("/") end
   def kind() @kind end
   def jobs() @jobs end
+  def jobs_s() @jobs.join("") end
   def to_s() @name end
 
   def chain(ws)
