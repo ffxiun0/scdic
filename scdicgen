@@ -4,33 +4,90 @@
 # Copyright 2019 ffxiun0
 # https://opensource.org/licenses/MIT
 
-def main()
-  wslist = read_ws()
+require 'optparse'
 
-  write_ws_list(wslist)
-  write_element_combination(wslist)
-  write_ws_combination(wslist)
-  write_nochain_ws_combination(wslist)
-  write_loop_chains(wslist)
+def main()
+  options = get_options(ARGV)
+
+  wslist = read_ws(ARGV)
+
+  alt_write_to(options[:outfile]) {|fstream|
+    gen = options[:generate]
+
+    if gen.include?("list") then
+      write_ws_list(fstream, wslist)
+    end
+
+    if gen.include?("chain") then
+      write_element_combination(fstream, wslist)
+      write_ws_combination(fstream, wslist)
+    end
+
+    if gen.include?("loop") then
+      write_loop_chains(fstream, wslist)
+    end
+
+    if gen.include?("nochain") then
+      write_nochain_ws_combination(fstream, wslist)
+    end
+  }
 end
 
-def read_ws()
+def get_options(argv)
+  options = { :generate => ["list","chain","loop"] }
+
+  parser = OptionParser.new
+  parser.on("-g", "--generate TARGET,TARGET,...", Array)
+  parser.on("-o", "--outfile FILE")
+  parser.parse!(argv, into: options)
+
+  return options
+end
+
+def alt_write_to(file, &block)
+  if file.nil? then
+    block.call(STDOUT)
+  else
+    File.open(file, 'w') {|f|
+      begin
+        block.call(f)
+      rescue
+        File.unlink(file)
+        raise
+      end
+    }
+  end
+end
+
+def alt_read_from(files, &block)
+  if files.nil? or files.empty? then
+    block.call(STDIN)
+  else
+    files.each {|file|
+      File.open(file) {|f| block.call(f) }
+    }
+  end
+end
+
+def read_ws(files)
   wslist = []
 
-  STDIN.each_line {|line|
-    wslist << WeaponSkill.parse(line)
+  alt_read_from(files) {|f|
+    f.each_line {|line|
+      wslist << WeaponSkill.parse(line)
+    }
   }
 
   return wslist
 end
 
-def write_dic_entry(kanas, word)
+def write_dic_entry(fstream, kanas, word)
   kanas.each {|kana|
-    printf("%s\t%s\t短縮よみ\n", kana, word)
+    fstream.printf("%s\t%s\t短縮よみ\n", kana, word)
   }
 end
 
-def write_ws_list(wslist)
+def write_ws_list(fstream, wslist)
   wslist.each {|ws|
     kanas = [ws.type_kana] + ws.kanas
 
@@ -41,17 +98,17 @@ def write_ws_list(wslist)
 
     word = sprintf("%s(%s)【%s】", ws.name, ws.elems_s, desc)
 
-    write_dic_entry(kanas, word)
+    write_dic_entry(fstream, kanas, word)
   }
 end
 
-def write_element_combination(wslist)
+def write_element_combination(fstream, wslist)
   wslist.each {|ws|
     ChainElement.all.each {|elem|
       if chain = ws.chain_from(elem) then
         kanas = make_ec_kanas(elem, ws, chain)
         word = make_ec_word(ws, chain)
-        write_dic_entry(kanas, word)
+        write_dic_entry(fstream, kanas, word)
       end
     }
   }
@@ -74,13 +131,13 @@ def make_ec_word(ws, chain)
 
 end
 
-def write_ws_combination(wslist)
+def write_ws_combination(fstream, wslist)
   wslist.each {|ws1|
     wslist.each {|ws2|
       if chain = ws1.chain(ws2) then
         kanas = make_wsc_kanas(ws1, ws2, chain)
         word = make_wsc_word(ws1, ws2, chain)
-        write_dic_entry(kanas, word)
+        write_dic_entry(fstream, kanas, word)
       end
     }
   }
@@ -115,13 +172,13 @@ def make_wsc_word(ws1, ws2, chain)
           chain.chain.name, chain.chain.last ? "<終>" : "")
 end
 
-def write_nochain_ws_combination(wslist)
+def write_nochain_ws_combination(fstream, wslist)
   wslist.each {|ws1|
     wslist.each {|ws2|
       if !ws1.chain(ws2) && !ws2.chain(ws1) then
         kanas = make_no_wsc_kanas(ws1, ws2)
         word = make_no_wsc_word(ws1, ws2)
-        write_dic_entry(kanas, word)
+        write_dic_entry(fstream, kanas, word)
       end
     }
   }
@@ -155,7 +212,7 @@ def make_no_wsc_word(ws1, ws2)
                  ws2.name, ws2.elems_s, selfchain2)
 end
 
-def write_loop_chains(wslist)
+def write_loop_chains(fstream, wslist)
   wslist.each {|ws|
     if chain1 = ws.chain(ws) then
       if chain2 = ws.chain_from(chain1.chain) then
@@ -163,7 +220,7 @@ def write_loop_chains(wslist)
           kanas = ["むげんれんけい"]
           word = sprintf("【無限連携】%s(%s⇔%s)", ws.name,
                          chain1.first.name, chain1.chain.name)
-          write_dic_entry(kanas, word)
+          write_dic_entry(fstream, kanas, word)
         end
       end
     end
