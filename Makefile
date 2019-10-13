@@ -16,16 +16,10 @@ scdic-main-google.txt: ws.txt
 scdic-nochain-google.txt: ws.txt
 	ruby scdicgen -g nochain -o $@ $<
 
-scdic-main-win7.txt: scdic-main-google.txt
+%-win7.txt: %-google.txt
 	sed 's/短縮よみ/独立語/' $< | iconv -f utf-8 -t ms932 -o $@
 
-scdic-nochain-win7.txt: scdic-nochain-google.txt
-	sed 's/短縮よみ/独立語/' $< | iconv -f utf-8 -t ms932 -o $@
-
-scdic-main-win8_win10.txt: scdic-main-google.txt
-	iconv -f utf-8 -t ms932 -o $@ $<
-
-scdic-nochain-win8_win10.txt: scdic-nochain-google.txt
+%-win8_win10.txt: %-google.txt
 	iconv -f utf-8 -t ms932 -o $@ $<
 
 $(ZIP): LICENSE $(TARGET)
