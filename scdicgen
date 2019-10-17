@@ -12,29 +12,15 @@ def main()
   wslist = read_ws(ARGV)
 
   alt_write_to(options[:outfile]) {|fstream|
-    gen = options[:generate]
-
-    if gen.include?("list") then
-      write_ws_list(fstream, wslist)
-    end
-
-    if gen.include?("chain") then
-      write_element_combination(fstream, wslist)
-      write_ws_combination(fstream, wslist)
-    end
-
-    if gen.include?("loop") then
-      write_loop_chains(fstream, wslist)
-    end
-
-    if gen.include?("nochain") then
-      write_nochain_ws_combination(fstream, wslist)
-    end
+    options[:generate].each {|name|
+      dicgen = DictionaryGenerator.create(name, wslist)
+      dicgen.write(fstream)
+    }
   }
 end
 
 def get_options(argv)
-  options = { :generate => ["list","chain","loop"] }
+  options = { :generate => ["list","element","chain","loop"] }
 
   parser = OptionParser.new
   parser.on("-g", "--generate TARGET,TARGET,...", Array)
@@ -81,148 +67,199 @@ def read_ws(files)
   return wslist
 end
 
-def write_dic_entry(fstream, kanas, word)
-  kanas.each {|kana|
-    fstream.printf("%s\t%s\t短縮よみ\n", kana, word)
-  }
-end
+class DictionaryGenerator
+  def self.create(name, wslist)
+    case name
+    when "list"
+      SkillListGenerator.new(wslist)
+    when "element"
+      ElementSkillCombinationGenerator.new(wslist)
+    when "chain"
+      SkillCombinationGenerator.new(wslist)
+    when "nochain"
+      NoChainSkillCombinationGenerator.new(wslist)
+    when "loop"
+      LoopChainGenerator.new(wslist)
+    else
+      fail("unknown generator name '" + name + "'")
+    end
+  end
 
-def write_ws_list(fstream, wslist)
-  wslist.each {|ws|
-    kanas = [ws.type_kana] + ws.kanas
-
-    dlist = [ws.type]
-    dlist << ws.kind if not ws.kind.empty?
-    dlist << ws.jobs_s if not ws.jobs_s.empty?
-    desc = dlist.join("/")
-
-    word = sprintf("%s(%s)【%s】", ws.name, ws.elems_s, desc)
-
-    write_dic_entry(fstream, kanas, word)
-  }
-end
-
-def write_element_combination(fstream, wslist)
-  wslist.each {|ws|
-    ChainElement.all.each {|elem|
-      if chain = ws.chain_from(elem) then
-        kanas = make_ec_kanas(elem, ws, chain)
-        word = make_ec_word(ws, chain)
-        write_dic_entry(fstream, kanas, word)
-      end
+  def write_entry(fstream, kanas, word)
+    kanas.each {|kana|
+      fstream.printf("%s\t%s\t短縮よみ\n", kana, word)
     }
-  }
+  end
 end
 
-def make_ec_kanas(elem, ws, chain)
-  result = []
+class SkillListGenerator < DictionaryGenerator
+  def initialize(wslist)
+    @wslist = wslist
+  end
 
-  result << elem.kana + "＞" + ws.type_kana
-  result << elem.kana + "＞" + ws.type_kana + "＞" + chain.chain.kana
-  result += ws.kanas.map {|ws_kana| elem.kana + "＞" + ws_kana}
-
-  return result
-end
-
-def make_ec_word(ws, chain)
-  sprintf("(%s)＞%s(%s)＞[%s]%s",
-          chain.first.name, ws.name, chain.second.name,
-          chain.chain.name, chain.chain.last ? "<終>" : "")
-
-end
-
-def write_ws_combination(fstream, wslist)
-  wslist.each {|ws1|
-    wslist.each {|ws2|
-      if chain = ws1.chain(ws2) then
-        kanas = make_wsc_kanas(ws1, ws2, chain)
-        word = make_wsc_word(ws1, ws2, chain)
-        write_dic_entry(fstream, kanas, word)
-      end
+  def write(fstream)
+    @wslist.each {|ws|
+      kanas = [ws.type_kana] + ws.kanas
+      word = make_word(ws)
+      write_entry(fstream, kanas, word)
     }
-  }
+  end
+
+  def make_word(ws)
+    list = [ws.type]
+    list << ws.kind if not ws.kind.empty?
+    list << ws.jobs_s if not ws.jobs_s.empty?
+    desc = list.join("/")
+
+    sprintf("%s(%s)【%s】", ws.name, ws.elems_s, desc)
+  end
 end
 
-def make_wsc_kanas(ws1, ws2, chain)
-  result = []
+class ElementSkillCombinationGenerator < DictionaryGenerator
+  def initialize(wslist)
+    @wslist = wslist
+  end
 
-  ws1.kanas.each {|ws1_kana|
-    ws2.kanas.each {|ws2_kana|
-      result << ws1_kana + "＞" + ws2_kana
+  def write(fstream)
+    @wslist.each {|ws|
+      ChainElement.all.each {|elem|
+        if chain = ws.chain_from(elem) then
+          kanas = make_kanas(elem, ws, chain)
+          word = make_word(ws, chain)
+          write_entry(fstream, kanas, word)
+        end
+      }
     }
-  }
-  ws1.kanas.each {|ws1_kana|
+  end
+
+  def make_kanas(elem, ws, chain)
+    result = []
+
+    result << elem.kana + "＞" + ws.type_kana
+    result << elem.kana + "＞" + ws.type_kana + "＞" + chain.chain.kana
+    result += ws.kanas.map {|ws_kana| elem.kana + "＞" + ws_kana}
+
+    return result
+  end
+
+  def make_word(ws, chain)
+    sprintf("(%s)＞%s(%s)＞[%s]%s",
+            chain.first.name, ws.name, chain.second.name,
+            chain.chain.name, chain.chain.last ? "<終>" : "")
+
+  end
+end
+
+class SkillCombinationGenerator < DictionaryGenerator
+  def initialize(wslist)
+    @wslist = wslist
+  end
+
+  def write(fstream)
+    @wslist.each {|ws1|
+      @wslist.each {|ws2|
+        if chain = ws1.chain(ws2) then
+          kanas = make_kanas(ws1, ws2, chain)
+          word = make_word(ws1, ws2, chain)
+          write_entry(fstream, kanas, word)
+        end
+      }
+    }
+  end
+
+  def make_kanas(ws1, ws2, chain)
+    result = []
+
+    ws1.kanas.each {|ws1_kana|
+      ws2.kanas.each {|ws2_kana|
+        result << ws1_kana + "＞" + ws2_kana
+      }
+    }
+    ws1.kanas.each {|ws1_kana|
       result << ws1_kana + "＞" + ws2.type_kana
       result << ws1_kana + "＞" + ws2.type_kana + "＞" + chain.chain.kana
-  }
-  ws2.kanas.each {|ws2_kana|
+    }
+    ws2.kanas.each {|ws2_kana|
       result << ws1.type_kana + "＞" + ws2_kana
       result << ws1.type_kana + "＞" + ws2_kana + "＞" + chain.chain.kana
-  }
-  result << ws1.type_kana + "＞" + ws2.type_kana
-  result << ws1.type_kana + "＞" + ws2.type_kana + "＞" + chain.chain.kana
-
-  return result
-end
-
-def make_wsc_word(ws1, ws2, chain)
-  sprintf("%s(%s)＞%s(%s)＞[%s]%s",
-          ws1.name, chain.first.name,
-          ws2.name, chain.second.name,
-          chain.chain.name, chain.chain.last ? "<終>" : "")
-end
-
-def write_nochain_ws_combination(fstream, wslist)
-  wslist.each {|ws1|
-    wslist.each {|ws2|
-      if !ws1.chain(ws2) && !ws2.chain(ws1) then
-        kanas = make_no_wsc_kanas(ws1, ws2)
-        word = make_no_wsc_word(ws1, ws2)
-        write_dic_entry(fstream, kanas, word)
-      end
     }
-  }
+    result << ws1.type_kana + "＞" + ws2.type_kana
+    result << ws1.type_kana + "＞" + ws2.type_kana + "＞" + chain.chain.kana
+
+    return result
+  end
+
+  def make_word(ws1, ws2, chain)
+    sprintf("%s(%s)＞%s(%s)＞[%s]%s",
+            ws1.name, chain.first.name,
+            ws2.name, chain.second.name,
+            chain.chain.name, chain.chain.last ? "<終>" : "")
+  end
 end
 
-def make_no_wsc_kanas(ws1, ws2)
-  result = []
+class NoChainSkillCombinationGenerator < DictionaryGenerator
+  def initialize(wslist)
+    @wslist = wslist
+  end
 
-  ws1.kanas.each {|ws1_kana|
-    ws2.kanas.each {|ws2_kana|
-      result << ws1_kana + "｜" + ws2_kana
+  def write(fstream)
+    @wslist.each {|ws1|
+      @wslist.each {|ws2|
+        if !ws1.chain(ws2) && !ws2.chain(ws1) then
+          kanas = make_kanas(ws1, ws2)
+          word = make_word(ws1, ws2)
+          write_entry(fstream, kanas, word)
+        end
+      }
     }
-  }
-  ws1.kanas.each {|ws1_kana|
+  end
+
+  def make_kanas(ws1, ws2)
+    result = []
+
+    ws1.kanas.each {|ws1_kana|
+      ws2.kanas.each {|ws2_kana|
+        result << ws1_kana + "｜" + ws2_kana
+      }
+    }
+    ws1.kanas.each {|ws1_kana|
       result << ws1_kana + "｜" + ws2.type_kana
-  }
-  ws2.kanas.each {|ws2_kana|
+    }
+    ws2.kanas.each {|ws2_kana|
       result << ws1.type_kana + "｜" + ws2_kana
-  }
-  result << ws1.type_kana + "｜" + ws2.type_kana
+    }
+    result << ws1.type_kana + "｜" + ws2.type_kana
 
-  return result
+    return result
+  end
+
+  def make_word(ws1, ws2)
+    selfchain1 = ws1.chain(ws1) ? "<自己連携有>" : ""
+    selfchain2 = ws2.chain(ws2) ? "<自己連携有>" : ""
+
+    return sprintf("【連携しない】%s(%s)%s｜%s(%s)%s",
+                   ws1.name, ws1.elems_s, selfchain1,
+                   ws2.name, ws2.elems_s, selfchain2)
+  end
 end
 
-def make_no_wsc_word(ws1, ws2)
-  selfchain1 = ws1.chain(ws1) ? "<自己連携有>" : ""
-  selfchain2 = ws2.chain(ws2) ? "<自己連携有>" : ""
+class LoopChainGenerator < DictionaryGenerator
+  def initialize(wslist)
+    @wslist = wslist
+  end
 
-  return sprintf("【連携しない】%s(%s)%s｜%s(%s)%s",
-                 ws1.name, ws1.elems_s, selfchain1,
-                 ws2.name, ws2.elems_s, selfchain2)
-end
+  def write(fstream)
+    @wslist.each {|ws|
+      next if not chain1 = ws.chain(ws)
+      next if not chain2 = ws.chain_from(chain1.chain)
+      next if chain1.first.name != chain2.chain.name
 
-def write_loop_chains(fstream, wslist)
-  wslist.each {|ws|
-    next if not chain1 = ws.chain(ws)
-    next if not chain2 = ws.chain_from(chain1.chain)
-    next if chain1.first.name != chain2.chain.name
-
-    kanas = ["むげんれんけい"]
-    word = sprintf("【無限連携】%s(%s⇔%s)", ws.name,
-                   chain1.first.name, chain1.chain.name)
-    write_dic_entry(fstream, kanas, word)
-  }
+      kanas = ["むげんれんけい"]
+      word = sprintf("【無限連携】%s(%s⇔%s)", ws.name,
+                     chain1.first.name, chain1.chain.name)
+      write_entry(fstream, kanas, word)
+    }
+  end
 end
 
 class WeaponSkill
