@@ -3,6 +3,9 @@ TARGET=scdic-main-google.txt scdic-main-win10.txt	\
 
 ZIP=scdic.zip
 
+RUBY=ruby
+SCDICGEN=$(RUBY) scdicgen.rb
+
 all: $(TARGET)
 
 zip: $(ZIP)
@@ -11,10 +14,10 @@ clean:
 	$(RM) $(TARGET) $(ZIP)
 
 scdic-main-google.txt: ws.txt
-	ruby scdicgen -o $@ $<
+	$(SCDICGEN) -o $@ $<
 
 scdic-nochain-google.txt: ws.txt
-	ruby scdicgen -g nochain -o $@ $<
+	$(SCDICGEN) -g nochain -o $@ $<
 
 %-win10.txt: %-google.txt
 	iconv -f utf-8 -t ms932 -o $@ $<
