@@ -1,0 +1,13 @@
+[*]
+tab_width = 8
+indent_size = 8
+indent_style = space
+
+[*.rb]
+indent_size = 2
+
+[*.txt]
+indent_style = tab
+
+[Makefile]
+indent_style = tab
