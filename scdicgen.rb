@@ -99,7 +99,7 @@ class SkillListGenerator < DictionaryGenerator
 
   def write(fstream)
     @wslist.each {|ws|
-      kanas = [ws.type_kana] + ws.kanas
+      kanas = ws.all_kanas
       word = make_word(ws)
       write_entry(fstream, kanas, word)
     }
@@ -135,9 +135,13 @@ class ElementSkillCombinationGenerator < DictionaryGenerator
   def make_kanas(elem, ws, chain)
     result = []
 
-    result << elem.kana + "＞" + ws.type_kana
-    result << elem.kana + "＞" + ws.type_kana + "＞" + chain.chain.kana
-    result += ws.kanas.map {|ws_kana| elem.kana + "＞" + ws_kana}
+    ws.type_kanas.each {|ws_type_kana|
+      result << elem.kana + "＞" + ws_type_kana
+      result << elem.kana + "＞" + ws_type_kana + "＞" + chain.chain.kana
+    }
+    ws.name_kanas.each {|ws_name_kana|
+      result << elem.kana + "＞" + ws_name_kana
+    }
 
     return result
   end
@@ -170,21 +174,29 @@ class SkillCombinationGenerator < DictionaryGenerator
   def make_kanas(ws1, ws2, chain)
     result = []
 
-    ws1.kanas.each {|ws1_kana|
-      ws2.kanas.each {|ws2_kana|
-        result << ws1_kana + "＞" + ws2_kana
+    ws1.name_kanas.each {|ws1_name_kana|
+      ws2.name_kanas.each {|ws2_name_kana|
+        result << ws1_name_kana + "＞" + ws2_name_kana
       }
     }
-    ws1.kanas.each {|ws1_kana|
-      result << ws1_kana + "＞" + ws2.type_kana
-      result << ws1_kana + "＞" + ws2.type_kana + "＞" + chain.chain.kana
+    ws1.name_kanas.each {|ws1_name_kana|
+      ws2.type_kanas.each {|ws2_type_kana|
+        result << ws1_name_kana + "＞" + ws2_type_kana
+        result << ws1_name_kana + "＞" + ws2_type_kana + "＞" + chain.chain.kana
+      }
     }
-    ws2.kanas.each {|ws2_kana|
-      result << ws1.type_kana + "＞" + ws2_kana
-      result << ws1.type_kana + "＞" + ws2_kana + "＞" + chain.chain.kana
+    ws1.type_kanas.each {|ws1_type_kana|
+      ws2.name_kanas.each {|ws2_name_kana|
+        result << ws1_type_kana + "＞" + ws2_name_kana
+        result << ws1_type_kana + "＞" + ws2_name_kana + "＞" + chain.chain.kana
+      }
     }
-    result << ws1.type_kana + "＞" + ws2.type_kana
-    result << ws1.type_kana + "＞" + ws2.type_kana + "＞" + chain.chain.kana
+    ws1.type_kanas.each {|ws1_type_kana|
+      ws2.type_kanas.each {|ws2_type_kana|
+        result << ws1_type_kana + "＞" + ws2_type_kana
+        result << ws1_type_kana + "＞" + ws2_type_kana + "＞" + chain.chain.kana
+      }
+    }
 
     return result
   end
@@ -217,18 +229,11 @@ class NoChainSkillCombinationGenerator < DictionaryGenerator
   def make_kanas(ws1, ws2)
     result = []
 
-    ws1.kanas.each {|ws1_kana|
-      ws2.kanas.each {|ws2_kana|
+    ws1.all_kanas.each {|ws1_kana|
+      ws2.all_kanas.each {|ws2_kana|
         result << ws1_kana + "｜" + ws2_kana
       }
     }
-    ws1.kanas.each {|ws1_kana|
-      result << ws1_kana + "｜" + ws2.type_kana
-    }
-    ws2.kanas.each {|ws2_kana|
-      result << ws1.type_kana + "｜" + ws2_kana
-    }
-    result << ws1.type_kana + "｜" + ws2.type_kana
 
     return result
   end
@@ -263,29 +268,30 @@ class LoopChainGenerator < DictionaryGenerator
 end
 
 class WeaponSkill
-  def initialize(type, kanas, name, elems, kind, jobs)
-    (@type, @kanas, @name, @elems, @kind, @jobs) =
-      type, kanas, name, elems, kind, jobs
+  def initialize(type_kanas, type, name_kanas, name, elems, kind, jobs)
+    (@type_kanas, @type, @name_kanas, @name, @elems, @kind, @jobs) =
+      type_kanas, type, name_kanas, name, elems, kind, jobs
 
-    @type_kana = @@type_kana[@type]
     @name += "(A)" if @kind == "イオニック"
   end
 
   def self.parse(line)
-    (type, kanas, name, elems, kind, jobs) =
+    (type_kanas, type, name_kanas, name, elems, kind, jobs) =
       line.split(/\t/).map {|s| s.strip}
 
-    kanas = kanas.split(/\//)
+    type_kanas = type_kanas.split(/\//)
+    name_kanas = name_kanas.split(/\//)
     elems = ChainElement.parse(elems)
     kind = kind ? kind : ""
     jobs = jobs ? jobs.split(/\//) : []
 
-    return WeaponSkill.new(type, kanas, name, elems, kind, jobs)
+    return WeaponSkill.new(type_kanas, type, name_kanas, name, elems, kind, jobs)
   end
 
+  def all_kanas() @type_kanas + @name_kanas end
+  def type_kanas() @type_kanas end
   def type() @type end
-  def type_kana() @type_kana end
-  def kanas() @kanas end
+  def name_kanas() @name_kanas end
   def name() @name end
   def elems() @elems end
   def elems_s() @elems.empty? ? "なし" : @elems.join("/") end
@@ -313,65 +319,6 @@ class WeaponSkill
     }
     return nil
   end
-
-  @@type_kana = {
-    "格闘" => "かくとう",
-    "短剣" => "たんけん",
-    "片手剣" => "かたてけん",
-    "両手剣" => "りょうてけん",
-    "片手斧" => "かたておの",
-    "両手斧" => "りょうておの",
-    "両手槍" => "りょうてやり",
-    "両手鎌" => "りょうてかま",
-    "片手刀" => "かたてとう",
-    "両手刀" => "りょうてとう",
-    "片手棍" => "かたてこん",
-    "両手棍" => "りょうてこん",
-    "弓術" => "きゅうじゅつ",
-    "射撃" => "しゃげき",
-    "ウサギ族" => "うさぎ",
-    "大羊族" => "おおひつじ",
-    "剣虎族" => "けんこ",
-    "ラズ族" => "らず",
-    "トカゲ族" => "とかげ",
-    "エフト族" => "えふと",
-    "ラプトル族" => "らぷとる",
-    "アダマンタス族" => "あだまんたす",
-    "フライ族" => "ふらい",
-    "甲虫族" => "こうちゅう",
-    "アントリオン族" => "あんとりおん",
-    "ダイアマイト族" => "だいあまいと",
-    "レディバグ族" => "れでぃばぐ",
-    "チャプリ族" => "ちゃぷり",
-    "スパイダー族" => "すぱいだー",
-    "鍬形族" => "くわがた",
-    "マンドラゴラ族" => "まんどらごら",
-    "キノコ族" => "きのこ",
-    "サボテンダー族" => "さぼてんだー",
-    "スナップウィード族" => "すなっぷうぃーど",
-    "アプカル族" => "あぷかる",
-    "ヒッポグリフ族" => "ひっぽぐりふ",
-    "トゥルフェイア族" => "とぅるふぇいあ",
-    "コリブリ族" => "こりぶり",
-    "クラブ族" => "くらぶ",
-    "プギル族" => "ぷぎる",
-    "リーチ族" => "りーち",
-    "スライム族" => "すらいむ",
-    "カーバンクル" => "かーばんくる",
-    "イフリート" => "いふりーと",
-    "タイタン" => "たいたん",
-    "リヴァイアサン" => "りヴぁいあさん",
-    "ガルーダ" => "がるーだ",
-    "シヴァ" => "しヴぁ",
-    "ラムウ" => "らむう",
-    "フェンリル" => "ふぇんりる",
-    "ディアボロス" => "でぃあぼろす",
-    "ケット・シー" => "けっとしー",
-    "セイレーン" => "せいれーん",
-    "魔法戦フレーム" => "まほうせん",
-    "白兵戦フレーム" => "はくへいせん",
-    "射撃戦フレーム" => "しゃげきせん",
-  }
 end
 
 class ChainElement
