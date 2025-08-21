@@ -27,7 +27,7 @@ def get_options(argv)
   parser.on("-o", "--outfile FILE")
   parser.parse!(argv, into: options)
 
-  return options
+  options
 end
 
 def alt_write_to(file, &block)
@@ -64,7 +64,7 @@ def read_ws(files)
     }
   }
 
-  return wslist
+  wslist
 end
 
 class DictionaryGenerator
@@ -106,9 +106,7 @@ class SkillListGenerator < DictionaryGenerator
   end
 
   def make_word(ws)
-    list = [ws.type]
-    list << ws.kind if not ws.kind.empty?
-    list << ws.jobs_s if not ws.jobs_s.empty?
+    list = [ws.type, ws.kind, ws.jobs_s].reject {|s| s.empty?}
     desc = list.join("/")
 
     sprintf("%s(%s)【%s】", ws.name, ws.elems_s, desc)
@@ -121,14 +119,12 @@ class ElementSkillCombinationGenerator < DictionaryGenerator
   end
 
   def write(fstream)
-    @wslist.each {|ws|
-      ChainElement.all.each {|elem|
-        if chain = ws.chain_from(elem) then
-          kanas = make_kanas(elem, ws, chain)
-          word = make_word(ws, chain)
-          write_entry(fstream, kanas, word)
-        end
-      }
+    @wslist.product(ChainElement.all) {|ws, elem|
+      if chain = ws.chain_from(elem) then
+        kanas = make_kanas(elem, ws, chain)
+        word = make_word(ws, chain)
+        write_entry(fstream, kanas, word)
+      end
     }
   end
 
@@ -136,21 +132,21 @@ class ElementSkillCombinationGenerator < DictionaryGenerator
     result = []
 
     ws.type_kanas.each {|ws_type_kana|
-      result << elem.kana + "＞" + ws_type_kana
-      result << elem.kana + "＞" + ws_type_kana + "＞" + chain.chain.kana
+      result << "#{elem.kana}＞#{ws_type_kana}"
+      result << "#{elem.kana}＞#{ws_type_kana}＞#{chain.chain.kana}"
     }
     ws.name_kanas.each {|ws_name_kana|
-      result << elem.kana + "＞" + ws_name_kana
+      result << "#{elem.kana}＞#{ws_name_kana}"
     }
 
-    return result
+    result
   end
 
   def make_word(ws, chain)
     sprintf("(%s)＞%s(%s)＞[%s]%s",
-            chain.first.name, ws.name, chain.second.name,
+            chain.first.name,
+            ws.name, chain.second.name,
             chain.chain.name, chain.chain.last ? "<終>" : "")
-
   end
 end
 
@@ -160,45 +156,31 @@ class SkillCombinationGenerator < DictionaryGenerator
   end
 
   def write(fstream)
-    @wslist.each {|ws1|
-      @wslist.each {|ws2|
-        if chain = ws1.chain(ws2) then
-          kanas = make_kanas(ws1, ws2, chain)
-          word = make_word(ws1, ws2, chain)
-          write_entry(fstream, kanas, word)
-        end
-      }
+    @wslist.product(@wslist) {|ws1, ws2|
+      if chain = ws1.chain(ws2) then
+        kanas = make_kanas(ws1, ws2, chain)
+        word = make_word(ws1, ws2, chain)
+        write_entry(fstream, kanas, word)
+      end
     }
   end
 
   def make_kanas(ws1, ws2, chain)
+    (make_kana_pairs(ws1.name_kanas, ws2.name_kanas, nil) +
+     make_kana_pairs(ws1.name_kanas, ws2.type_kanas, chain.chain.kana) +
+     make_kana_pairs(ws1.type_kanas, ws2.name_kanas, chain.chain.kana) +
+     make_kana_pairs(ws1.type_kanas, ws2.type_kanas, chain.chain.kana))
+  end
+
+  def make_kana_pairs(kanas1, kanas2, chain_kana)
     result = []
 
-    ws1.name_kanas.each {|ws1_name_kana|
-      ws2.name_kanas.each {|ws2_name_kana|
-        result << ws1_name_kana + "＞" + ws2_name_kana
-      }
-    }
-    ws1.name_kanas.each {|ws1_name_kana|
-      ws2.type_kanas.each {|ws2_type_kana|
-        result << ws1_name_kana + "＞" + ws2_type_kana
-        result << ws1_name_kana + "＞" + ws2_type_kana + "＞" + chain.chain.kana
-      }
-    }
-    ws1.type_kanas.each {|ws1_type_kana|
-      ws2.name_kanas.each {|ws2_name_kana|
-        result << ws1_type_kana + "＞" + ws2_name_kana
-        result << ws1_type_kana + "＞" + ws2_name_kana + "＞" + chain.chain.kana
-      }
-    }
-    ws1.type_kanas.each {|ws1_type_kana|
-      ws2.type_kanas.each {|ws2_type_kana|
-        result << ws1_type_kana + "＞" + ws2_type_kana
-        result << ws1_type_kana + "＞" + ws2_type_kana + "＞" + chain.chain.kana
-      }
+    kanas1.product(kanas2) {|kana1, kana2|
+      result << "#{kana1}＞#{kana2}"
+      result << "#{kana1}＞#{kana2}＞#{chain_kana}" if chain_kana
     }
 
-    return result
+    result
   end
 
   def make_word(ws1, ws2, chain)
@@ -215,36 +197,32 @@ class NoChainSkillCombinationGenerator < DictionaryGenerator
   end
 
   def write(fstream)
-    @wslist.each {|ws1|
-      @wslist.each {|ws2|
-        if !ws1.chain(ws2) && !ws2.chain(ws1) then
-          kanas = make_kanas(ws1, ws2)
-          word = make_word(ws1, ws2)
-          write_entry(fstream, kanas, word)
-        end
-      }
+    @wslist.product(@wslist) {|ws1, ws2|
+      if !ws1.chain(ws2) && !ws2.chain(ws1) then
+        kanas = make_kanas(ws1, ws2)
+        word = make_word(ws1, ws2)
+        write_entry(fstream, kanas, word)
+      end
     }
   end
 
   def make_kanas(ws1, ws2)
     result = []
 
-    ws1.all_kanas.each {|ws1_kana|
-      ws2.all_kanas.each {|ws2_kana|
-        result << ws1_kana + "｜" + ws2_kana
-      }
+    ws1.all_kanas.product(ws2.all_kanas) {|kana1, kana2|
+      result << "#{kana1}｜#{kana2}"
     }
 
-    return result
+    result
   end
 
   def make_word(ws1, ws2)
     selfchain1 = ws1.chain(ws1) ? "<自己連携有>" : ""
     selfchain2 = ws2.chain(ws2) ? "<自己連携有>" : ""
 
-    return sprintf("【連携しない】%s(%s)%s｜%s(%s)%s",
-                   ws1.name, ws1.elems_s, selfchain1,
-                   ws2.name, ws2.elems_s, selfchain2)
+    sprintf("【連携しない】%s(%s)%s｜%s(%s)%s",
+            ws1.name, ws1.elems_s, selfchain1,
+            ws2.name, ws2.elems_s, selfchain2)
   end
 end
 
@@ -255,8 +233,8 @@ class LoopChainGenerator < DictionaryGenerator
 
   def write(fstream)
     @wslist.each {|ws|
-      next if not chain1 = ws.chain(ws)
-      next if not chain2 = ws.chain_from(chain1.chain)
+      next unless chain1 = ws.chain(ws)
+      next unless chain2 = ws.chain_from(chain1.chain)
       next if chain1.first.name != chain2.chain.name
 
       kanas = ["むげんれんけい"]
@@ -285,7 +263,7 @@ class WeaponSkill
     kind = kind ? kind : ""
     jobs = jobs ? jobs.split(/\//) : []
 
-    return WeaponSkill.new(type_kanas, type, name_kanas, name, elems, kind, jobs)
+    WeaponSkill.new(type_kanas, type, name_kanas, name, elems, kind, jobs)
   end
 
   def all_kanas() @type_kanas + @name_kanas end
@@ -301,30 +279,28 @@ class WeaponSkill
   def to_s() @name end
 
   def chain(ws)
-    @elems.each {|elem1|
-      ws.elems.each{|elem2|
-        if chain = elem1.chain(elem2) then
-          return ChainResult.new(elem1, elem2, chain)
-        end
-      }
+    @elems.product(ws.elems) {|elem1, elem2|
+      if chain = elem1.chain(elem2) then
+        return ChainResult.new(elem1, elem2, chain)
+      end
     }
-    return nil
+    nil
   end
 
   def chain_from(elem)
-    @elems.each{|elem2|
+    @elems.each {|elem2|
       if chain = elem.chain(elem2) then
         return ChainResult.new(elem, elem2, chain)
       end
     }
-    return nil
+    nil
   end
 end
 
 class ChainElement
   def initialize(name, last = false)
     @name = name
-    @kana = @@kana[@name]
+    @kana = KANA[@name]
     @last = last
   end
 
@@ -335,19 +311,19 @@ class ChainElement
 
   def chain(elem)
     return nil if @last
-    return nil if not map = @@map[@name]
-    return nil if not chain = map[elem.name]
-    return ChainElement.new(chain[:element], chain[:last])
+    return nil unless map = MAP[@name]
+    return nil unless chain = map[elem.name]
+    ChainElement.new(chain[:element], chain[:last])
   end
 
   def self.parse(text)
     return [] if text.nil?
-    return text.split(/\//).map {|s| ChainElement.new(s.strip)}
+    text.split(/\//).map {|s| ChainElement.new(s.strip)}
   end
 
-  def self.all() @@all end
+  def self.all() ALL end
 
-  @@map = {
+  MAP = {
     "貫通" => {
       "収縮" => { element: "収縮", last: false },
       "切断" => { element: "湾曲", last: false },
@@ -405,9 +381,9 @@ class ChainElement
     "闇" => {
       "闇" => { element: "闇", last: true },
     },
-  }
+  }.freeze
 
-  @@kana = {
+  KANA = {
     "貫通" => "かんつう",
     "収縮" => "しゅうしゅく",
     "溶解" => "ようかい",
@@ -422,9 +398,9 @@ class ChainElement
     "分解" => "ぶんかい",
     "光" => "ひかり",
     "闇" => "やみ",
-  }
+  }.freeze
 
-  @@all = @@map.keys.map {|s| ChainElement.new(s)}
+  ALL = MAP.keys.map {|s| ChainElement.new(s)}.freeze
 end
 
 class ChainResult
@@ -439,4 +415,6 @@ class ChainResult
   def chain() @chain end
 end
 
-main()
+if __FILE__ == $0
+  main()
+end
