@@ -249,8 +249,6 @@ class WeaponSkill
   def initialize(type_kanas, type, name_kanas, name, elems, kind, jobs)
     (@type_kanas, @type, @name_kanas, @name, @elems, @kind, @jobs) =
       type_kanas, type, name_kanas, name, elems, kind, jobs
-
-    @name += "(A)" if @kind == "イオニック"
   end
 
   def self.parse(line)
