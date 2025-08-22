@@ -277,10 +277,12 @@ class WeaponSkill
   def to_s() @name end
 
   def chain(ws)
-    @elems.product(ws.elems) {|elem1, elem2|
-      if chain = elem1.chain(elem2) then
-        return ChainResult.new(elem1, elem2, chain)
-      end
+    @elems.each {|elem1|
+      ws.elems.each {|elem2|
+        if chain = elem1.chain(elem2) then
+          return ChainResult.new(elem1, elem2, chain)
+        end
+      }
     }
     nil
   end
