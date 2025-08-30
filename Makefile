@@ -1,7 +1,7 @@
-TARGET=scdic-main-google.txt scdic-main-win10.txt		\
-       scdic-main+pet-google.txt scdic-main+pet-win10.txt	\
-       scdic-nochain-google.txt scdic-nochain-win10.txt		\
-       scdic-nochain+pet-google.txt scdic-nochain+pet-win10.txt
+DIC=scdic-main.txt scdic-main+pet.txt scdic-nochain.txt	\
+    scdic-nochain+pet.txt
+
+DIC_UTF8=$(DIC:.txt=.tsv)
 
 DIST_ZIP=scdic.zip
 
@@ -10,27 +10,27 @@ SCDICGEN=$(RUBY) scdicgen.rb
 ICONV=iconv
 ZIP=zip -9
 
-all: $(TARGET)
+all: $(DIC)
 
 dist: $(DIST_ZIP)
 
 clean:
-	$(RM) $(TARGET) $(DIST_ZIP)
+	$(RM) $(DIC) $(DIC_UTF8) $(DIST_ZIP)
 
-scdic-main-google.txt: ws.txt
+scdic-main.tsv: ws.txt
 	$(SCDICGEN) -o $@ $<
 
-scdic-main+pet-google.txt: ws.txt ps.txt
+scdic-main+pet.tsv: ws.txt ps.txt
 	$(SCDICGEN) -o $@ $^
 
-scdic-nochain-google.txt: ws.txt
+scdic-nochain.tsv: ws.txt
 	$(SCDICGEN) -g nochain -o $@ $<
 
-scdic-nochain+pet-google.txt: ws.txt ps.txt
+scdic-nochain+pet.tsv: ws.txt ps.txt
 	$(SCDICGEN) -g nochain -o $@ $^
 
-%-win10.txt: %-google.txt
-	$(ICONV) -f utf-8 -t ms932 -o $@ $<
+%.txt: %.tsv
+	$(ICONV) -f utf-8 -t utf-16 -o $@ $<
 
-$(DIST_ZIP): LICENSE $(TARGET)
+$(DIST_ZIP): LICENSE $(DIC)
 	$(ZIP) $@ $^
