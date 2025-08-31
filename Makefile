@@ -7,7 +7,7 @@ DIST_ZIP=scdic.zip
 
 RUBY=ruby
 SCDICGEN=$(RUBY) scdicgen.rb
-ICONV=iconv
+ICONV=uconv -f utf-8 -t utf-16le --add-signature
 ZIP=zip -9
 
 all: $(DIC)
@@ -30,7 +30,7 @@ scdic-nochain+pet.tsv: ws.txt ps.txt
 	$(SCDICGEN) -g nochain -o $@ $^
 
 %.txt: %.tsv
-	$(ICONV) -f utf-8 -t utf-16 -o $@ $<
+	$(ICONV) -o $@ $<
 
 $(DIST_ZIP): LICENSE $(DIC)
 	$(ZIP) $@ $^
